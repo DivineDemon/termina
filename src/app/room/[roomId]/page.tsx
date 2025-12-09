@@ -2,19 +2,68 @@
 
 import { client } from "@/lib/client";
 import { copyRoomUrl, formatTimeLeft } from "@/lib/utils";
-import { useMutation } from "@tanstack/react-query";
-import { useParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { useUsername } from "@/hooks/use-username";
+import { format } from "date-fns";
+import { useRealtime } from "@/lib/realtime-client";
 
 const Page = () => {
   const params = useParams();
+  const router = useRouter();
   const { username } = useUsername();
   const roomId = params.roomId as string;
   const [input, setInput] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [copyStatus, setCopyStatus] = useState<string>("COPY");
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+  const { data: ttl } = useQuery({
+    queryKey: ["ttl", roomId],
+    queryFn: async () => {
+      const ttl = await client.room.ttl.get({ query: { roomId } });
+      return ttl.data;
+    },
+  });
+
+  useEffect(() => {
+    if (ttl?.ttl !== undefined) {
+      setTimeLeft(ttl.ttl);
+    }
+  }, [ttl]);
+
+  useEffect(() => {
+    if (timeLeft === null || timeLeft < 0) {
+      return;
+    }
+
+    if (timeLeft === 0) {
+      router.push("/?destroyed=true");
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [timeLeft, router]);
+
+  const { data: messages, refetch } = useQuery({
+    queryKey: ["messages", roomId],
+    queryFn: async () => {
+      const messages = await client.messages.get({ query: { roomId } });
+      return messages.data;
+    },
+  });
 
   const { mutate: sendMessage, isPending } = useMutation({
     mutationFn: async ({ text }: { text: string }) => {
@@ -25,6 +74,22 @@ const Page = () => {
         },
         { query: { roomId } },
       );
+
+      setInput("");
+    },
+  });
+
+  useRealtime({
+    channels: [roomId],
+    events: ["chat.message", "chat.destroy"],
+    onData: ({ event }) => {
+      if (event === "chat.message") {
+        refetch();
+      }
+
+      if (event === "chat.destroy") {
+        router.push("/?destroyed=true");
+      }
     },
   });
 
@@ -66,7 +131,39 @@ const Page = () => {
           DESTROY NOW
         </button>
       </header>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin"></div>
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin">
+        {messages?.messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-zinc-600 text-sm font-mono">
+              No messages yet. Start the conversation.
+            </p>
+          </div>
+        ) : (
+          messages?.messages.map((msg) => (
+            <div className="flex flex-col items-start" key={msg.id}>
+              <div className="max-w-[80%] group">
+                <div className="flex items-baseline gap-3 mb-1">
+                  <span
+                    className={`text-xs font-bold ${
+                      msg.sender === username
+                        ? "text-green-500"
+                        : "text-blue-500"
+                    }`}
+                  >
+                    {msg.sender === username ? "You" : msg.sender}
+                  </span>
+                  <span className="text-[10px] text-zinc-600">
+                    {format(msg.timestamp, "HH:mm")}
+                  </span>
+                </div>
+                <p className="text-sm text-zinc-300 leading-relaxed break-all">
+                  {msg.text}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
       <div className="p-4 border-t border-zinc-800 bg-zinc-900/30">
         <div className="flex gap-4">
           <div className="flex-1 relative group">
