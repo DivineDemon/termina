@@ -1,32 +1,13 @@
 "use client";
 
+import { useUsername } from "@/hooks/use-username";
 import { client } from "@/lib/client";
-import { STORAGE_KEY } from "@/lib/constants";
-import { generateRandomUsername } from "@/lib/utils";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 
 export default function Home() {
   const router = useRouter();
-  const [username, setUsername] = useState<string>("");
-
-  const main = () => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-
-    if (stored) {
-      setUsername(stored);
-      return;
-    } else {
-      const username = generateRandomUsername();
-      localStorage.setItem(STORAGE_KEY, username);
-      setUsername(username);
-    }
-  };
-
-  useEffect(() => {
-    main();
-  }, []);
+  const { username } = useUsername();
 
   const { mutate: createRoom } = useMutation({
     mutationFn: async () => {
