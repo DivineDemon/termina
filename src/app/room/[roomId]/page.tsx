@@ -93,6 +93,12 @@ const Page = () => {
     },
   });
 
+  const { mutate: destroyRoom } = useMutation({
+    mutationFn: async () => {
+      await client.room.delete(null, { query: { roomId } });
+    },
+  });
+
   return (
     <main className="flex flex-col h-screen max-h-screen overflow-hidden">
       <header className="border-b border-zinc-800 p-4 flex items-center justify-between bg-zinc-900/30">
@@ -126,7 +132,11 @@ const Page = () => {
             </span>
           </div>
         </div>
-        <button className="text-xs bg-zinc-800 hover:bg-red-800 px-3 py-1.5 rounded text-zinc-400 hover:text-white font-bold transition-all group flex items-center gap-2 disabled:opacity-50">
+        <button
+          type="button"
+          onClick={() => destroyRoom()}
+          className="text-xs bg-zinc-800 hover:bg-red-800 px-3 py-1.5 rounded text-zinc-400 hover:text-white font-bold transition-all group flex items-center gap-2 disabled:opacity-50"
+        >
           <span className="group-hover:animate-pulse">💣</span>
           DESTROY NOW
         </button>
